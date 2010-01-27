@@ -7,7 +7,7 @@ simple, stupid, flat format for genomic features.
 
     >>> flat = Flat('data/thaliana_v8.flat', 'data/thaliana_v8.fasta')
     >>> flat.accn('AT1G01370')
-    (41, '1', 'AT1G01370', 143564, 145684, '+', 'CDS', '143773,143824,143773,143824')
+    (41, '1', 'AT1G01370', 143564, 145684, '+', 'CDS', [(143773, 143824), (143773, 143824)])
 
     >>> seq = flat.row_sequence('AT1G01370') 
     >>> seq == flat.row_sequence(flat[flat['accn'] == 'AT1G01370'][0])
@@ -20,14 +20,11 @@ simple, stupid, flat format for genomic features.
     >>> cds_seq[:10]
     'ATGGCGAGAA'
 
-    >>> flat.row_locs('AT1G01370')
+    >>> flat.accn('AT1G01370')['locs']
     [(143773, 143824), (143773, 143824)]
 
-    >>> flat.accn('AT1G01370')['locs']
-    '143773,143824,143773,143824'
-
     >>> flat.accn('AT1G01370')
-    (41, '1', 'AT1G01370', 143564, 145684, '+', 'CDS', '143773,143824,143773,143824')
+    (41, '1', 'AT1G01370', 143564, 145684, '+', 'CDS', [(143773, 143824), (143773, 143824)])
 
     >>> list(flat[:5].genic_fasta(outfile=None))[4].split("\n")[0]
     '>AT1G01046'
@@ -47,7 +44,7 @@ flat file)
     >>> flat.row_introns('AT1G01010')
     [(3914, 3995), (4277, 4485), (4606, 4705), (5096, 5173), (5327, 5438)]
 
-    >>> Flat.sequence_for_locs([1, 10], flat.fasta['1'])
+    >>> Flat.sequence_for_locs([(1, 10)], flat.fasta['1'])
     'CCCTAAACCC'
 
     >>> flat.get_features_in_region('1', 5000, 7000)['accn']
@@ -71,17 +68,28 @@ def checkrowtype(fn):
     to pass to the sequence functions """
     @functools.wraps(fn)
     def wrapper(cls, row):
+        r = row
         if isinstance(row, str):
-            row = cls[cls['accn'] == row][0]
-        return fn(cls, row)
+            try:
+                r = cls[cls['accn'] == row][0]
+            except IndexError:
+                print >>sys.stderr, row
+                raise
+        return fn(cls, r)
     return wrapper
+
+def _loc_conv(locstr):
+    locs = map(int, locstr.split(","))
+    return zip(locs[::2], locs[1::2])
+    
 
 class Flat(np.ndarray):
     names = ('id', 'seqid', 'accn', 'start', 'end', 'strand', 'ftype', 'locs')
-    formats = ('i4', 'S12', 'S64', 'i4', 'i4', 'S1', 'S32', 'S1024')
+    formats = ('i4', 'S12', 'S64', 'i4', 'i4', 'S1', 'S32', 'O')
     def __new__(cls, path, fasta_path):
         obj = np.loadtxt(path, delimiter="\t", dtype={'names': cls.names, 
-                                      'formats': cls.formats}, skiprows=1)
+                                                      'formats': cls.formats},
+                                         skiprows=1, converters={7: _loc_conv})
         obj = obj.view(cls)
         obj.path = path
         obj.fasta = Fasta(fasta_path, flatten_inplace=True)
@@ -115,14 +123,13 @@ class Flat(np.ndarray):
         assert row.shape == ()
         seqid = row['seqid']
         fa = self.fasta[seqid]
-        locs = map(int, row['locs'].split(","))
-        return Flat.sequence_for_locs(locs, fa)
+        return Flat.sequence_for_locs(row['locs'], fa)
 
     @classmethod
     def sequence_for_locs(cls, locs, fa):
         seq = []
-        for i in range(0, len(locs), 2):
-            seq.append(fa[locs[i] - 1: locs[i + 1]])
+        for start, end in locs:
+            seq.append(fa[start - 1: end])
         return "".join(seq)
 
     def accn(self, accn, first_only=True):
@@ -174,8 +181,7 @@ class Flat(np.ndarray):
             fa = np.array(self.fasta[seqid].copy())
             s = fa.shape[0]
             for row in self[self['seqid'] == seqid]:
-                locs = self.row_locs(row) if cds else [(row['start'], row['end'])]
-                for start, end in locs:
+                for start, end in row['locs']:
                     fa[start - 1: end] = mask_with
             assert s == fa.shape[0]
             if out is None:
@@ -183,26 +189,16 @@ class Flat(np.ndarray):
             else:
                 print >> out, ">%s\n%s" % (seqid, fa)
 
+    @checkrowtype
     def row_introns(self, row):
         """
         grap the introns for this feature
         """
-        locs = reduce(operator.add, self.row_locs(row))[1:-1]
+        locs = reduce(operator.add, row['locs'])[1:-1]
 
         its = zip([x + 1 for x in locs[0::2]], 
                   [x - 1 for x in locs[1::2]])
         return its
-
-    @checkrowtype
-    def row_locs(self, row):
-        try:
-            locs = map(int, row['locs'].split(","))
-        except:
-            print row
-            raise
-        return zip(locs[::2], locs[1::2])
-
-    row_exons = row_locs
 
     def _fasta(self, outfile, seq_fn, header_key):
         if isinstance(outfile, basestring):
