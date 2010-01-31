@@ -54,6 +54,16 @@ flat file)
     >>> flat.get_features_in_region('1', 4000, 4000)['accn'][0]
     'AT1G01010'
 
+    >>> Flat.row_string(flat[0])
+    '1\t1\tAT1G01010\t3631\t5899\t+\tCDS\t3760,3913,3996,4276,4486,4605,4706,5095,5174,5326,5439,5630'
+
+    >>> flat.seqids
+    ['1', '2', '3', '4', '5']
+
+    >>> flat.fill_dict()
+    >>> flat.d["AT1G01010"]
+    (1, '1', 'AT1G01010', 3631, 5899, '+', 'CDS', [(3760, 3913), (3996, 4276), (4486, 4605), (4706, 5095), (5174, 5326), (5439, 5630)])
+
 """
 
 import numpy as np
@@ -86,13 +96,14 @@ def _loc_conv(locstr):
 class Flat(np.ndarray):
     names = ('id', 'seqid', 'accn', 'start', 'end', 'strand', 'ftype', 'locs')
     formats = ('i4', 'S12', 'S64', 'i4', 'i4', 'S1', 'S32', 'O')
-    def __new__(cls, path, fasta_path):
+    def __new__(cls, path, fasta_path=None):
         obj = np.loadtxt(path, delimiter="\t", dtype={'names': cls.names, 
                                                       'formats': cls.formats},
                                          skiprows=1, converters={7: _loc_conv})
         obj = obj.view(cls)
         obj.path = path
-        obj.fasta = Fasta(fasta_path, flatten_inplace=True)
+        if fasta_path is not None:
+            obj.fasta = Fasta(fasta_path, flatten_inplace=True)
         return obj.view(cls)
 
     def __array_finalize__(self, obj):
@@ -113,6 +124,15 @@ class Flat(np.ndarray):
         f = self.fasta[seqid]
         return f[row['start'] - 1:row['end']]
 
+    @property
+    def seqids(self):
+        return sorted(np.unique(self['seqid']).tolist())
+
+    @classmethod
+    def row_string(cls, row):
+        strlocs = ",".join("%i,%i" % pair for pair in row['locs'])
+        return "\t".join(map(str, [row[c] for c in cls.names[:-1]])) + "\t" + strlocs
+
     @checkrowtype
     def row_cds_sequence(self, row):
         """
@@ -131,6 +151,11 @@ class Flat(np.ndarray):
         for start, end in locs:
             seq.append(fa[start - 1: end])
         return "".join(seq)
+
+    def fill_dict(self):
+        """ allow fast lookup of a row by accn name"""
+        self.d = dict((row['accn'], row) for row in self)
+
 
     def accn(self, accn, first_only=True):
         r = self[self['accn'] == accn]
