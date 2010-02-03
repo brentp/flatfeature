@@ -9,7 +9,7 @@
 >>> g.splicings
 ['.1', '.2']
 
->>> g['.1.].types
+>>> g['.1.'].types
 ['CDS', 'mRNA', 'five_prime_utr', 'three_prime_utr', 'gene']
 
 >>> g['.1'].CDS
@@ -28,87 +28,14 @@
 ['At1g...', ...]
 
 """
+import gt
+gt.warning_disable()
+import operator
+import pprint
 
-class GFFLine(object):
-    __slots__ = ('seqid', 'com', 'type', 'start', 'stop', 'end', 'strand', 'other',
-                    'attrs', 'attribs', 'sattrs', 'orig')
-    def __init__(self, sline):
-        line = sline.rstrip().split("\t")
-        self.seqid = line[0]
-        self.com  = line[1]
-        self.type = line[2]
-        self.start = int(line[3])
-        self.stop = self.end = int(line[4])
-        self.orig = line[5]
-        self.strand = line[6] in ('-', '-1') and -1 or 1
-        self.other = line[7]
-        self.sattrs = line[8]
-        self.attrs = self.attribs = self._parse_attrs(line[8])
-
-    def _parse_attrs(self, sattrs):
-        attrs = {}
-        if "=" in sattrs:
-            for pair in sattrs.split(';'):
-                if not pair: continue
-                pair = pair.split('=')
-                attrs[pair[0]] = pair[1]
-        if attrs == {}: attrs["ID"] = sattrs.rstrip("\r\n; ")
-        return attrs
-
-    @classmethod
-    def _get_non_comment_line(cls, fh):
-        while True:
-            line = fh.readline()
-            if line and line[0] == '#': continue
-            return line
-
-
-    def __repr__(self):
-        return "GL(%s %s %s)" % (self.seqid, self.type, self.attrs)
-
-    
-def _get_gff_block(fh):
-    """
-    so this just continues to append lines to lines[]
-    until Parent attribute of a line does not match
-    any of the values in parent_ids
-    any time a line is found with a new ID attribute
-    (whose Parent attr matches the current parent_ids list),
-    that line's own ID is added to the parent_ids list"""
-
-    lines = [GFFLine._get_non_comment_line(fh)]
-    if _get_gff_block.parent_ids is None:
-        _get_gff_block.parent_ids = [GFFLine(lines[0]).attribs["ID"]]
-
-    parent_ids = _get_gff_block.parent_ids
-
-    while True:
-        lines.append(GFFLine._get_non_comment_line(fh))
-        new_parent = False
-        for parent_id in parent_ids:
-            if 'Parent=' + parent_id in lines[-1]:
-                if not lines[-1]: 1/0; return lines # end of file
-                lines.append(GFFLine._get_non_comment_line(fh))
-                if 'ID=' in lines[-1]:
-                    new_parent=True
-                break
-        if new_parent:
-            parent_ids.append(GFFLine(lines[-1]).attribs["ID"])
-        else:
-            break
-    if len(parent_ids) == 1:
-        parent_ids = [GFFLine(lines[-1]).attribs["ID"]]
-        print parent_ids 
-    else:
-        parent_ids = [parent_ids[-1]]
-    
-    _get_gff_block.parent_ids = parent_ids
-    return [GFFLine(l) for l in lines]
-
-_get_gff_block.parent_ids = None
-_get_gff_block.lines = None
-
-
+class Accn(object):
+    def __init__(self, type_loc_dict):
+        pass        
 
 class Fat(object):
     seqids = None
@@ -125,18 +52,29 @@ class Fat(object):
     def itervalues(self):
         return self.accns.itervalues()
 
-    def parse_file(self, gff_filename, skip=('chromosome', )):
-        fh = open(gff_filename)
-        while True:
-            block = _get_gff_block(fh)
-            if block is None: return 
-            if block[0].type in skip: continue
-            try:
-                print "ID:", block[0].attribs["ID"]
-            except:
-                print block[0]
-                raise
-            
+    def parse_file(self, gff_filename):
+        fi = gt.FeatureIndexMemory()
+        fi.add_gff3file(gff_filename)
+        self.seqids = sorted(fi.get_seqids())
+        accns = {}
+        for seqid in self.seqids:
+            for i, parent in enumerate(sorted(fi.get_features_for_seqid(seqid), 
+                                       key=operator.attrgetter('start'))):
 
+                d = {'strand': parent.strand, 'seqid': seqid}
+                ids = []
+                for f in parent:
+                    if "ID" in f.attribs: ids.append(f.attribs["ID"])
+                    if not ids[-1] in d: d[ids[-1]] = {}
+                    if not f.type in d[ids[-1]]: d[ids[-1]][f.type] = []
+                    d[ids[-1]][f.type].append((f.start, f.end))
+                    #print subf.attribs, subf.type, subf.get_type()
+                accns[ids[0]] = d
+                    
+                if i == 1: 
+                    pprint.pprint( accns)
+                    1/0
+                    break
+        self.accns = accns
 
 Fat("data/thaliana_v9_genes.gff")
