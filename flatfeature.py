@@ -113,6 +113,10 @@ class Flat(np.ndarray):
 
     __array_priority__ = 10
 
+    @classmethod
+    def row_to_dict(self, row):
+        return dict((name, row[name]) for name in Flat.names)
+
     @checkrowtype
     def row_sequence(self, row):
         """
