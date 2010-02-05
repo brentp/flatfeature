@@ -19,23 +19,35 @@
 >>> g.CDS # merged of all splicings.
 [[6915L, 7069L], [7157L, 7232L], [7315L, 7450L], [7564L, 7649L], [7762L, 7835L], [7942L, 7987L], [8236L, 8325L], [8417L, 8464L], [8571L, 8666L]]
 
+>>> g.start, g.end, g.accn
+(5928L, 8737L, 'AT1G01020')
 
-#>>> f.upstream(g, 1000, exclude='all') # only non-feature (non coding)
+>>> g = f['AT1G01050']
+>>> g.start, g.end, g.accn
+(31170L, 33153L, 'AT1G01050')
+
+>>> list(f.get_features_in_region('1', 6915, 14127))
+[Accn('AT1G01020', -, 5928:8737), Accn('AT1G01030', -, 11649:13714)]
+
+
+#>>> f.upstream(g, 1000, noncoding=True) # only non-feature (non coding)
 [(55, 99), (0, 22)] 
 
-#>>> f.upstream(g, 1000, features=True)
-['At1g...', ...]
+#>>> f.upstream(g, 1000, noncoding=False) # doctest:+ELLIPSIS
+[Accn('At1g...'), ...]
 
 """
 import gt
 gt.warning_disable()
 import operator
-import pprint
+import numpy as np
+import sys
 
 class Accn(object):
 
     def __repr__(self):
-        return "Accn('%s', %s)" % (self.accn, self.strand)
+        return "Accn('%s', %s, %i:%i)" % (self.accn, self.strand, 
+                                          self.start, self.end)
     
     def _get_merged_type(self, feature_type):
         """
@@ -113,12 +125,81 @@ def make_accn(accn, type_loc_dict):
 
 class Fat(object):
     seqids = None
+    posns = {}
 
     def __init__(self, gff_filename):
         self.parse_file(gff_filename)
+        self._set_start_stops()
 
     def __getitem__(self, accn):
         return self.accns[accn]
+
+    def _set_start_stops(self):
+        """go through and save an ordered list of positions 
+        by seqid in order so we can do a binary search 
+        by start, end."""
+        posns = {}
+        slen = 0
+        for name, accn in self.accns.iteritems():
+            if not accn.seqid in posns: 
+                posns[accn.seqid] = {'start': [], 'end':[]}
+            if len(name) > slen: slen = len(name)
+            posns[accn.seqid]['start'].append((accn.start, name))
+            posns[accn.seqid]['end'].append((accn.end, name))
+
+        for seqid in posns:
+            for k in ('start', 'end'):
+                locs = posns[seqid][k]
+                locs = np.array(locs, dtype=\
+                    np.dtype([(k, np.uint32), ('accn', 'S%i' % slen)]))
+
+                locs.sort(order=(k,))
+                #if k == 'end': locs = locs[::-1]
+                posns[seqid][k] = locs
+        self.posns = posns
+    
+    def get_features_in_region(self, seqid, start, end):
+        posns = self.posns[seqid]
+        ix0 = posns['end']['end'].searchsorted(start, "left")
+        ix1 = posns['start']['start'].searchsorted(end, "right")
+
+        # have to grab from both to ensure we get everything.
+        accns_0 = posns['start'][ix0:ix1]['accn']
+        accns_1 = posns['end'][ix0:ix1]['accn']
+        accns = np.unique1d(np.concatenate((accns_0, accns_1)))
+        for accn in (self.accns[str(a)] for a in accns):
+            if accn.start <= end and accn.end >= start:
+                yield accn
+
+
+
+    def upstream(self, accn, bp, noncoding=True):
+        """
+        get the 'stuff' within bp upstream of `accn`
+        if `noncoding` is true, 'stuff' is a list of
+        intervals excluding any genes (or introns).
+        if `noncoding` is False, 'stuff' is a list of
+        Accns within that distance of bp.
+        """
+        if accn.strand == "+":
+            end = accn.start - 1 
+            start = max(end - bp, 1)
+        else:    
+            assert accn.strand == "-"
+            start = accn.end + 1
+            end = start + bp
+        
+
+
+    def downstream(self, accn, bp, noncoding=True):
+        if accn.strand == "-":
+            end = accn.start - 1 
+            start = max(end - bp, 1)
+        else:    
+            assert accn.strand == "+"
+            start = accn.end + 1
+            end = start + bp
+
 
     def iterkeys(self):
         return self.accns.iterkeys()
@@ -149,6 +230,7 @@ class Fat(object):
                 accns[ids[0]] = make_accn(ids[0], d)
 
         self.accns = accns
+
 
 if __name__ == "__main__":
 
