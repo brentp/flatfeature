@@ -23,18 +23,22 @@
 (5928L, 8737L, 'AT1G01020')
 
 >>> g = f['AT1G01050']
->>> g.start, g.end, g.accn
-(31170L, 33153L, 'AT1G01050')
+>>> g
+Accn('AT1G01050', -, 31170:33153)
 
 >>> list(f.get_features_in_region('1', 6915, 14127))
 [Accn('AT1G01020', -, 5928:8737), Accn('AT1G01030', -, 11649:13714)]
 
 
-#>>> f.upstream(g, 1000, noncoding=True) # only non-feature (non coding)
-[(55, 99), (0, 22)] 
+>>> list(f.upstream(g, 1000, noncoding=False)) # features
+[Accn('AT1G01060', -, 33379:37840)]
 
-#>>> f.upstream(g, 1000, noncoding=False) # doctest:+ELLIPSIS
-[Accn('At1g...'), ...]
+>>> list(f.downstream(g, 1000, noncoding=False)) # features
+[Accn('AT1G01040', +, 23146:31227)]
+
+
+>>> f.downstream(g, 12000, noncoding=True) # doctest:+ELLIPSIS
+[(19169L, 23518L), (24452L, 24541L), (24656L, 24751L), (24963L, 25040L), (25436L, 25523L), (25744L, 25824L), (25998L, 26080L), (26204L, 26291L), (26453L, 26542L), (26777L, 26861L), (27013L, 27098L), (27282L, 27371L), (27534L, 27617L), (27714L, 27802L), (28432L, 28707L), (28806L, 28889L), (29081L, 29159L), (30066L, 30146L), (30312L, 30409L), (30817L, 30901L), (31080L, 31169L)]
 
 """
 import gt
@@ -42,6 +46,11 @@ gt.warning_disable()
 import operator
 import numpy as np
 import sys
+import itertools
+from_iterable = itertools.chain.from_iterable
+
+def flatten(nli):
+    return list(from_iterable(nli))
 
 class Accn(object):
 
@@ -166,14 +175,14 @@ class Fat(object):
         # have to grab from both to ensure we get everything.
         accns_0 = posns['start'][ix0:ix1]['accn']
         accns_1 = posns['end'][ix0:ix1]['accn']
-        accns = np.unique1d(np.concatenate((accns_0, accns_1)))
+        accns = np.unique(np.concatenate((accns_0, accns_1)))
         for accn in (self.accns[str(a)] for a in accns):
             if accn.start <= end and accn.end >= start:
                 yield accn
 
 
 
-    def upstream(self, accn, bp, noncoding=True):
+    def upstream(self, accn, bp, noncoding=True, exclude=("CDS",)):
         """
         get the 'stuff' within bp upstream of `accn`
         if `noncoding` is true, 'stuff' is a list of
@@ -188,10 +197,36 @@ class Fat(object):
             assert accn.strand == "-"
             start = accn.end + 1
             end = start + bp
-        
+        return self._xstream(accn, start, end, noncoding, exclude)
 
+    def _xstream(self, accn, start, end, noncoding, exclude):
 
-    def downstream(self, accn, bp, noncoding=True):
+        feats = self.get_features_in_region(accn.seqid, start, end)    
+        if noncoding:
+            all = []
+            for e in exclude:
+                all.extend(flatten([getattr(f, e, []) for f in feats]))
+            all = Accn._merge(all)
+
+            posns = [start]
+            for s0, s1 in all:
+                if s1 >= end: 1/0;break
+                if s0 < posns[0]:
+                    posns = [s0]
+                else:
+                    posns.append(s0 - 1)
+                posns.append(s1 + 1)
+            if len(posns) == 1: posns.append(end)
+
+            if posns[-1] < end: 
+                posns.append( end)
+            else:
+                posns[-1] = end
+            return zip(posns[0::2], posns[1::2])
+        else:
+            return feats
+
+    def downstream(self, accn, bp, noncoding=True, exclude=("CDS",)):
         if accn.strand == "-":
             end = accn.start - 1 
             start = max(end - bp, 1)
@@ -199,6 +234,7 @@ class Fat(object):
             assert accn.strand == "+"
             start = accn.end + 1
             end = start + bp
+        return self._xstream(accn, start, end, noncoding, exclude)
 
 
     def iterkeys(self):
