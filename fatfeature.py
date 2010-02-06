@@ -40,6 +40,11 @@ Accn('AT1G01050', -, 31170:33153)
 >>> f.downstream(g, 12000, noncoding=True) # doctest:+ELLIPSIS
 [(19169L, 23518L), (24452L, 24541L), (24656L, 24751L), (24963L, 25040L), (25436L, 25523L), (25744L, 25824L), (25998L, 26080L), (26204L, 26291L), (26453L, 26542L), (26777L, 26861L), (27013L, 27098L), (27282L, 27371L), (27534L, 27617L), (27714L, 27802L), (28432L, 28707L), (28806L, 28889L), (29081L, 29159L), (30066L, 30146L), (30312L, 30409L), (30817L, 30901L), (31080L, 31169L)]
 
+>>> g = f['AT1G01050']
+>>> f.introns(g)
+[(31170L, 31381L), (31425L, 31520L), (31603L, 31692L), (31814L, 31932L), (31999L, 32087L), (32196L, 32281L), (32348L, 32430L), (32460L, 32546L), (32671L, 33153L)]
+
+
 """
 import gt
 gt.warning_disable()
@@ -78,6 +83,7 @@ class Accn(object):
 
     @classmethod
     def _merge(self, flist):
+        if not flist: return []
         flist = sorted(list(t) for t in flist)
         newl = [flist[0]]
         for i in range(1, len(flist)):
@@ -143,6 +149,7 @@ class Fat(object):
     def __getitem__(self, accn):
         return self.accns[accn]
 
+
     def _set_start_stops(self):
         """go through and save an ordered list of positions 
         by seqid in order so we can do a binary search 
@@ -169,8 +176,8 @@ class Fat(object):
     
     def get_features_in_region(self, seqid, start, end):
         posns = self.posns[seqid]
-        ix0 = posns['end']['end'].searchsorted(start, "left")
-        ix1 = posns['start']['start'].searchsorted(end, "right")
+        ix0 = posns['end']['end'].searchsorted(start, "right")
+        ix1 = posns['start']['start'].searchsorted(end, "left")
 
         # have to grab from both to ensure we get everything.
         accns_0 = posns['start'][ix0:ix1]['accn']
@@ -199,9 +206,12 @@ class Fat(object):
             end = start + bp
         return self._xstream(accn, start, end, noncoding, exclude)
 
+    def introns(self, accn):
+        return self._xstream(accn, accn.start, accn.end , True, ("CDS",))
+
     def _xstream(self, accn, start, end, noncoding, exclude):
 
-        feats = self.get_features_in_region(accn.seqid, start, end)    
+        feats = list(self.get_features_in_region(accn.seqid, start, end))
         if noncoding:
             all = []
             for e in exclude:
@@ -210,11 +220,13 @@ class Fat(object):
 
             posns = [start]
             for s0, s1 in all:
-                if s1 >= end: 1/0;break
-                if s0 < posns[0]:
-                    posns = [s0]
-                else:
+                if s1 >= end: 
                     posns.append(s0 - 1)
+                    break
+                if s0 < posns[0]:
+                    continue
+
+                posns.append(s0 - 1)
                 posns.append(s1 + 1)
             if len(posns) == 1: posns.append(end)
 
@@ -236,6 +248,8 @@ class Fat(object):
             end = start + bp
         return self._xstream(accn, start, end, noncoding, exclude)
 
+    def iteritems(self):
+        return self.accns.iteritems()
 
     def iterkeys(self):
         return self.accns.iterkeys()
@@ -270,6 +284,8 @@ class Fat(object):
 
 if __name__ == "__main__":
 
-    #f = Fat("data/thaliana_v9_genes.gff.short")
     import doctest
     doctest.testmod()
+    import cPickle
+    #f = Fat("data/thaliana_v9_genes.gff")
+    #cPickle.dump(f, open('t.pkl', 'wb'), -1)
