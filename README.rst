@@ -38,7 +38,7 @@ this module requires pyfasta (which is available via easy_install)
     '>4'
 
 and that id corresponds to the row number (+ 1) in the orignal array (and
-flat file)
+flat file) ::
 
     >>> flat[4 - 1]['accn']
     'AT1G01040'
@@ -58,3 +58,9 @@ flat file)
 
     >>> flat.get_features_in_region('1', 4000, 4000)['accn'][0]
     'AT1G01010'
+
+
+example useage: see how mean features on chromosome 4 are on the '-' strand ::
+
+    >>> flat[(flat['seqid'] == '4') & (flat['strand'] == '-')].shape
+    (2502,)
