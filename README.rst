@@ -2,8 +2,10 @@ flatfeature
 ===========
 simple, stupid, flat format for genomic features.
 all information for a given feature is saved on a single line.
-the format is described by the columns:
+the format is described by the columns::
+
     id  chr accn    start   stop    strand  ftype   locs
+
 where ftype is usually CDS if available, otherwise it's the 
 highest level feature type. e.g. 'miRNA' or 'pseudogene'...
 the locs is a string containing the start,stops. 
