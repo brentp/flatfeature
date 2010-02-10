@@ -207,7 +207,7 @@ class Flat(np.ndarray):
         if out is not None and isinstance(out, basestring):
             out = open(out, 'wb')
         for seqid in sorted(self.fasta.keys()):
-            fa = np.array(self.fasta[seqid].copy())
+            fa = np.array(self.fasta[seqid]).copy()
             s = fa.shape[0]
             for row in self[self['seqid'] == seqid]:
                 for start, end in row['locs']:
