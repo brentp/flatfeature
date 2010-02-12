@@ -17,8 +17,13 @@ simple, stupid, flat format for genomic features.
     >>> cds_seq == flat.row_cds_sequence(flat.accn('AT1G01370'))
     True
 
-    >>> cds_seq[:10]
-    'ATGGCGAGAA'
+    >>> cds_seq[:60]
+    'ATGGCGAGAACCAAGCATCGCGTTACCAGGTCACAACCTCGGAATCAAACTGATGGCGAG'
+    >>> cds_seq[-60:]
+    'TCAAACTGATGGCGAGAACCAAGCATCGCGTTACCAGGTCACAACCTCGGAATCAAACTG'
+    >>> len(cds_seq)
+    104
+
 
     >>> flat.accn('AT1G01370')['locs']
     [(143773, 143824), (143773, 143824)]
@@ -91,11 +96,18 @@ def checkrowtype(fn):
 def _loc_conv(locstr):
     locs = map(int, locstr.split(","))
     return zip(locs[::2], locs[1::2])
-    
+  
+def pairs_to_slice(pairs):
+    """
+    given a list of tuples (like a list of CDS start, stops), return
+    the numpy array that will work as a slice for those tuples
+    """
+    return np.concatenate([np.arange(s0-1, s1) for s0, s1 in pairs])
+ 
 
 class Flat(np.ndarray):
     names = ('id', 'seqid', 'accn', 'start', 'end', 'strand', 'ftype', 'locs')
-    formats = ('i4', 'S12', 'S64', 'i4', 'i4', 'S1', 'S32', 'O')
+    formats = ('i4', 'S32', 'S64', 'i4', 'i4', 'S1', 'S32', 'O')
     def __new__(cls, path, fasta_path=None):
         obj = np.loadtxt(path, delimiter="\t", dtype={'names': cls.names, 
                                                       'formats': cls.formats},
@@ -151,10 +163,7 @@ class Flat(np.ndarray):
 
     @classmethod
     def sequence_for_locs(cls, locs, fa):
-        seq = []
-        for start, end in locs:
-            seq.append(fa[start - 1: end])
-        return "".join(seq)
+        return "".join(fa[start - 1:end] for start, end in locs)
 
     def fill_dict(self):
         """ allow fast lookup of a row by accn name"""
@@ -239,11 +248,18 @@ class Flat(np.ndarray):
             else:
                 print >>outfile, ">%s" % header
                 print >>outfile, seq_fn(row)
+        raise StopIteration
 
     def genic_fasta(self, outfile=sys.stdout, header_key='accn'):
-        return self._fasta(outfile, self.row_sequence, header_key)
+        if outfile: # force through iteration of generator.
+            return list(self._fasta(outfile, self.row_sequence, header_key))
+        else:
+            return self._fasta(outfile, self.row_sequence, header_key)
     def cds_fasta(self, outfile=sys.stdout, header_key='accn'):
-        return self._fasta(outfile, self.row_cds_sequence, header_key)
+        if outfile: # force through iteration of generator.
+            return list(self._fasta(outfile, self.row_cds_sequence, header_key))
+        else:
+            return self._fasta(outfile, self.row_cds_sequence, header_key)
 
 
 if __name__ == "__main__":
