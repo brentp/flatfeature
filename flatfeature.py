@@ -113,7 +113,7 @@ class Flat(np.ndarray):
                                                       'formats': cls.formats},
                                          skiprows=1, converters={7: _loc_conv})
         obj = obj.view(cls)
-        obj.path = path
+        obj.path = obj.filename = path
         obj.d = None
         if fasta_path is not None:
             obj.fasta = Fasta(fasta_path, flatten_inplace=True)
@@ -121,7 +121,7 @@ class Flat(np.ndarray):
 
     def __array_finalize__(self, obj):
         if obj is None: return
-        self.path = getattr(obj, 'path', None)
+        self.path = self.filename = getattr(obj, 'path', getattr(obj, 'filename', None))
         self.fasta = getattr(obj, 'fasta', None)
         self.d = getattr(obj, 'd', None)
 
