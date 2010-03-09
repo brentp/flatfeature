@@ -175,7 +175,11 @@ class Flat(np.ndarray):
 
     def accn(self, accn, first_only=True):
         r = self[self['accn'] == accn]
-        if first_only: return r[0]
+        if first_only: 
+            try:
+                return r[0]
+            except:
+                raise KeyError("%s not found" % (accn,))
         return r
 
     def get_features_in_region(self, seqid, start, end):
