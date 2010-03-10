@@ -6,8 +6,12 @@ simple, stupid, flat format for genomic features.
 ::
 
     >>> flat = Flat('data/thaliana_v8.flat', 'data/thaliana_v8.fasta')
-    >>> flat.accn('AT1G01370')
+    >>> a = flat.accn('AT1G01370')
+    >>> a
     (41, '1', 'AT1G01370', 143564, 145684, '+', 'CDS', [(143773, 143824), (143773, 143824)])
+
+    >>> Flat.row_to_dict(a)
+    {'ftype': 'CDS', 'accn': 'AT1G01370', 'end': 145684, 'locs': [(143773, 143824), (143773, 143824)], 'start': 143564, 'seqid': '1', 'id': 41, 'strand': '+'}
 
     >>> seq = flat.row_sequence('AT1G01370') 
     >>> seq == flat.row_sequence(flat[flat['accn'] == 'AT1G01370'][0])
@@ -69,6 +73,30 @@ flat file)
     >>> flat.d["AT1G01010"]
     (1, '1', 'AT1G01010', 3631, 5899, '+', 'CDS', [(3760, 3913), (3996, 4276), (4486, 4605), (4706, 5095), (5174, 5326), (5439, 5630)])
 
+Bed
+===
+
+Bed is a subclass of Flat that provides exactly the same programmatic 
+interface, but uses .bed files for storage. This is the recommended
+way to use flatfeature as it is a standard format.
+
+    >>> b = Bed('data/brachy_v1.bed.short')
+    >>> bb = b.accn('Bradi1g00200')
+    >>> bb
+    ('Bd1', 10581, 11638, 'Bradi1g00200', '1057', '+', [(10581, 10850), (11252, 11638)], '.\t.', '.')
+
+    >>> Bed.row_to_dict(bb)
+    {'accn': 'Bradi1g00200', 'end': 11638, 'score': '1057', 'locs': [(10581, 10850), (11252, 11638)], 'start': 10581, 'rgb': '.', 'seqid': 'Bd1', 'thick': '.\t.', 'strand': '+'}
+
+    >>> b.seqids[:4]
+    ['Bd1', 'Bd5', 'scaffold_119', 'scaffold_12']
+
+    >>> Bed.row_string(bb)
+    'Bd1\t10580\t11638\tBradi1g00200\t1057\t+\t.\t.\t.\t2\t270,387\t0,671'
+
+    >>> Bed.row_string(bb, full=False)
+    'Bd1\t10580\t11638\tBradi1g00200'
+
 """
 
 import numpy as np
@@ -129,7 +157,7 @@ class Flat(np.ndarray):
 
     @classmethod
     def row_to_dict(self, row):
-        return dict((name, row[name]) for name in Flat.names)
+        return dict((name, row[name]) for name in self.names)
 
     @checkrowtype
     def row_sequence(self, row):
@@ -269,6 +297,59 @@ class Flat(np.ndarray):
             return self._fasta(outfile, self.row_cds_sequence, header_key)
 
 
+class Bed(Flat):
+    names = ('seqid', 'start', 'end', 'accn', 'score', 'strand', 'locs', 'thick', 'rgb')
+    formats = ('S32', 'i4', 'i4', 'S64', 'S10', 'S1', 'O', 'S10', 'S10')
+    def __new__(cls, path, fasta_path=None):
+        a = []
+        for line in open(path):
+            if line[0] == "#": continue
+            line = line.split("\t")
+            L = len(line)
+            if len(line) < 12:
+                line.extend(["."] * (12 - L) )
+
+            start = int(line[1]) + 1
+            end = int(line[2])
+            locs = [(start, end)]
+            if L == 12:
+                lens = map(int, line[10].split(","))
+                rel_starts = map(int, line[11].split(","))
+                starts = [start + rs for rs in rel_starts]
+                ends = [starts[i] + lens[i] - 1 for i in range(len(starts))]
+                locs = zip(starts, ends)
+
+            #         seqid,          end,        accn,
+            a.append((line[0], start, int(line[2]), line[3], 
+                      # score, strand,        # thicks 
+                      line[4], line[5], locs, line[6] + "\t" + line[7],
+                      line[8]))
+
+        obj = np.array(a, dtype=zip(Bed.names, Bed.formats))
+        obj = obj.view(cls)
+        obj.path = obj.filename = path
+        obj.d = None
+        
+        if fasta_path is not None:
+            obj.fasta = Fasta(fasta_path, flatten_inplace=True)
+        return obj.view(cls)
+
+    @classmethod
+    def row_string(cls, row, full=True):
+        if not full:
+            return "\t".join((row['seqid'], str(row['start'] - 1), str(row['end']), row['accn']))
+        starts = [s[0] - 1 for s in row['locs']]
+        ends = [s[1] for s in row['locs']]
+        slens = ",".join([str(e - s) for s, e in zip(starts, ends)])
+        sstarts = ",".join("%i" % (s - row['start'] + 1) for s in starts)
+        return "\t".join(map(str, [row['seqid'], row['start'] - 1, row['end'], 
+                                   row['accn'], row['score'], row['strand'], row['rgb'], row['thick'],
+                                   len(row['locs']), slens, sstarts]))
+
+
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
+
