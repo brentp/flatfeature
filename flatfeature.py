@@ -260,7 +260,7 @@ class Flat(np.ndarray):
             if out is None:
                 yield seqid, fa
             else:
-                print >> out, ">%s\n%s" % (seqid, fa)
+                print >> out, ">%s\n%s" % (seqid, fa.tostring())
 
     @checkrowtype
     def row_introns(self, row):
@@ -306,7 +306,7 @@ class Bed(Flat):
             if line[0] == "#": continue
             line = line.split("\t")
             L = len(line)
-            if len(line) < 12:
+            if L < 12:
                 line.extend(["."] * (12 - L) )
 
             start = int(line[1]) + 1
@@ -316,9 +316,9 @@ class Bed(Flat):
                 lens = map(int, line[10].split(","))
                 rel_starts = map(int, line[11].split(","))
                 starts = [start + rs for rs in rel_starts]
+
                 ends = [starts[i] + lens[i] - 1 for i in range(len(starts))]
                 locs = zip(starts, ends)
-
             #         seqid,          end,        accn,
             a.append((line[0], start, int(line[2]), line[3], 
                       # score, strand,        # thicks 
