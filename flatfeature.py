@@ -13,7 +13,7 @@ simple, stupid, flat format for genomic features.
     >>> Flat.row_to_dict(a)
     {'ftype': 'CDS', 'accn': 'AT1G01370', 'end': 145684, 'locs': [(143773, 143824), (143773, 143824)], 'start': 143564, 'seqid': '1', 'id': 41, 'strand': '+'}
 
-    >>> seq = flat.row_sequence('AT1G01370') 
+    >>> seq = flat.row_sequence('AT1G01370')
     >>> seq == flat.row_sequence(flat[flat['accn'] == 'AT1G01370'][0])
     True
 
@@ -76,7 +76,7 @@ flat file)
 Bed
 ===
 
-Bed is a subclass of Flat that provides exactly the same programmatic 
+Bed is a subclass of Flat that provides exactly the same programmatic
 interface, but uses .bed files for storage. This is the recommended
 way to use flatfeature as it is a standard format.
 
@@ -124,20 +124,20 @@ def checkrowtype(fn):
 def _loc_conv(locstr):
     locs = map(int, locstr.split(","))
     return zip(locs[::2], locs[1::2])
-  
+
 def pairs_to_slice(pairs):
     """
     given a list of tuples (like a list of CDS start, stops), return
     the numpy array that will work as a slice for those tuples
     """
     return np.concatenate([np.arange(s0-1, s1) for s0, s1 in pairs])
- 
+
 
 class Flat(np.ndarray):
     names = ('id', 'seqid', 'accn', 'start', 'end', 'strand', 'ftype', 'locs')
     formats = ('i4', 'S32', 'S64', 'i4', 'i4', 'S1', 'S32', 'O')
     def __new__(cls, path, fasta_path=None):
-        obj = np.loadtxt(path, delimiter="\t", dtype={'names': cls.names, 
+        obj = np.loadtxt(path, delimiter="\t", dtype={'names': cls.names,
                                                       'formats': cls.formats},
                                          skiprows=1, converters={7: _loc_conv})
         obj = obj.view(cls)
@@ -203,7 +203,7 @@ class Flat(np.ndarray):
 
     def accn(self, accn, first_only=True):
         r = self[self['accn'] == accn]
-        if first_only: 
+        if first_only:
             try:
                 return r[0]
             except:
@@ -213,7 +213,7 @@ class Flat(np.ndarray):
     def get_features_in_region(self, seqid, start, end):
         assert start <= end
         return self[
-            (self['seqid'] == seqid) & 
+            (self['seqid'] == seqid) &
             (self['start'] <= end) &
             (self['end'] >= start)
         ]
@@ -242,7 +242,7 @@ class Flat(np.ndarray):
 
 
     def _mask(self, cds, mask_with, out):
-        """ 
+        """
         yields tuples of seqid, masked_sequence
         for each chromsome in fasta
         where masked_sequence has all cds sequence
@@ -269,7 +269,7 @@ class Flat(np.ndarray):
         """
         locs = reduce(operator.add, row['locs'])[1:-1]
 
-        its = zip([x + 1 for x in locs[0::2]], 
+        its = zip([x + 1 for x in locs[0::2]],
                   [x - 1 for x in locs[1::2]])
         return its
 
@@ -320,8 +320,8 @@ class Bed(Flat):
                 ends = [starts[i] + lens[i] - 1 for i in range(len(starts))]
                 locs = zip(starts, ends)
             #         seqid,          end,        accn,
-            a.append((line[0], start, int(line[2]), line[3], 
-                      # score, strand,        # thicks 
+            a.append((line[0], start, int(line[2]), line[3],
+                      # score, strand,        # thicks
                       line[4], line[5], locs, line[6] + "\t" + line[7],
                       line[8]))
 
@@ -329,7 +329,7 @@ class Bed(Flat):
         obj = obj.view(cls)
         obj.path = obj.filename = path
         obj.d = None
-        
+
         if fasta_path is not None:
             obj.fasta = Fasta(fasta_path, flatten_inplace=True)
         return obj.view(cls)
@@ -342,7 +342,7 @@ class Bed(Flat):
         ends = [s[1] for s in row['locs']]
         slens = ",".join([str(e - s) for s, e in zip(starts, ends)])
         sstarts = ",".join("%i" % (s - row['start'] + 1) for s in starts)
-        return "\t".join(map(str, [row['seqid'], row['start'] - 1, row['end'], 
+        return "\t".join(map(str, [row['seqid'], row['start'] - 1, row['end'],
                                    row['accn'], row['score'], row['strand'], row['rgb'], row['thick'],
                                    len(row['locs']), slens, sstarts]))
 
