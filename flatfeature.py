@@ -325,7 +325,7 @@ class Bed(Flat):
                       line[4], line[5], locs, line[6] + "\t" + line[7],
                       line[8]))
 
-        obj = np.array(a, dtype=zip(Bed.names, Bed.formats))
+        obj = np.array(a, dtype=zip(cls.names, cls.formats))
         obj = obj.view(cls)
         obj.path = obj.filename = path
         obj.d = None
