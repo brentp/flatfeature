@@ -83,16 +83,16 @@ way to use flatfeature as it is a standard format.
     >>> b = Bed('data/brachy_v1.bed.short')
     >>> bb = b.accn('Bradi1g00200')
     >>> bb
-    ('Bd1', 10581, 11638, 'Bradi1g00200', '1057', '+', [(10581, 10850), (11252, 11638)], '.\t.', '.')
+    ('Bd1', 10581, 11638, 'Bradi1g00200', '1057', '+', [(10581, 10850), (11252, 11638)], -1, -1, '.')
 
     >>> Bed.row_to_dict(bb)
-    {'accn': 'Bradi1g00200', 'end': 11638, 'score': '1057', 'locs': [(10581, 10850), (11252, 11638)], 'start': 10581, 'rgb': '.', 'seqid': 'Bd1', 'thick': '.\t.', 'strand': '+'}
+    {'accn': 'Bradi1g00200', 'end': 11638, 'score': '1057', 'locs': [(10581, 10850), (11252, 11638)], 'start': 10581, 'rgb': '.', 'seqid': 'Bd1', 'thickend': -1, 'thickstart': -1, 'strand': '+'}
 
     >>> b.seqids[:4]
     ['Bd1', 'Bd5', 'scaffold_119', 'scaffold_12']
 
     >>> Bed.row_string(bb)
-    'Bd1\t10580\t11638\tBradi1g00200\t1057\t+\t.\t.\t.\t2\t270,387\t0,671'
+    'Bd1\t10580\t11638\tBradi1g00200\t1057\t+\t.\t-1\t-1\t2\t270,387\t0,671'
 
     >>> Bed.row_string(bb, full=False)
     'Bd1\t10580\t11638\tBradi1g00200'
@@ -298,8 +298,8 @@ class Flat(np.ndarray):
 
 
 class Bed(Flat):
-    names = ('seqid', 'start', 'end', 'accn', 'score', 'strand', 'locs', 'thick', 'rgb')
-    formats = ('S32', 'i4', 'i4', 'S64', 'S10', 'S1', 'O', 'S10', 'S10')
+    names = ('seqid', 'start', 'end', 'accn', 'score', 'strand', 'locs', 'thickstart', 'thickend', 'rgb')
+    formats = ('S32', 'i4', 'i4', 'S64', 'S10', 'S1', 'O', 'i4', 'i4', 'S10')
     def __new__(cls, path, fasta_path=None):
         a = []
         for line in open(path):
@@ -312,6 +312,8 @@ class Bed(Flat):
             start = int(line[1]) + 1
             end = int(line[2])
             locs = [(start, end)]
+            thickstart = int(line[6]) if line[6] != "." else -1
+            thickend = int(line[7]) if line[7] != "." else -1
             if L == 12:
                 lens = map(int, line[10].split(","))
                 rel_starts = map(int, line[11].split(","))
@@ -322,7 +324,7 @@ class Bed(Flat):
             #         seqid,          end,        accn,
             a.append((line[0], start, int(line[2]), line[3],
                       # score, strand,        # thicks
-                      line[4], line[5], locs, line[6] + "\t" + line[7],
+                      line[4], line[5], locs, thickstart, thickend,
                       line[8]))
 
         obj = np.array(a, dtype=zip(cls.names, cls.formats))
@@ -343,8 +345,8 @@ class Bed(Flat):
         slens = ",".join([str(e - s) for s, e in zip(starts, ends)])
         sstarts = ",".join("%i" % (s - row['start'] + 1) for s in starts)
         return "\t".join(map(str, [row['seqid'], row['start'] - 1, row['end'],
-                                   row['accn'], row['score'], row['strand'], row['rgb'], row['thick'],
-                                   len(row['locs']), slens, sstarts]))
+                                   row['accn'], row['score'], row['strand'], row['rgb'], row['thickstart'],
+                                   row['thickend'], len(row['locs']), slens, sstarts]))
 
 
 
