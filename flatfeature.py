@@ -315,8 +315,8 @@ class Bed(Flat):
             thickstart = int(line[6]) if line[6] != "." else -1
             thickend = int(line[7]) if line[7] != "." else -1
             if L == 12:
-                lens = map(int, line[10].split(","))
-                rel_starts = map(int, line[11].split(","))
+                lens = [int(i) for i in line[10].split(",") if i]
+                rel_starts = [int(i) for i in line[11].split(",") if i]
                 starts = [start + rs for rs in rel_starts]
 
                 ends = [starts[i] + lens[i] - 1 for i in range(len(starts))]
