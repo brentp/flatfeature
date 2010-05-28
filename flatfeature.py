@@ -304,7 +304,7 @@ class Bed(Flat):
         a = []
         for line in open(path):
             if line[0] == "#": continue
-            line = line.split("\t")
+            line = line.strip().split("\t")
             L = len(line)
             if L < 12:
                 line.extend(["."] * (12 - L) )
