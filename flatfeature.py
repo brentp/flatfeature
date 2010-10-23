@@ -248,17 +248,22 @@ class Flat(np.ndarray):
         where masked_sequence has all cds sequence
         masked.
         """
+        mask_with = np.array(mask_with, dtype='c')
         if out is not None and isinstance(out, basestring):
             out = open(out, 'wb')
         for seqid in sorted(self.fasta.keys()):
-            fa = np.array(self.fasta[seqid]).copy()
+            fa = np.array(self.fasta[seqid], dtype='S1')
             s = fa.shape[0]
             for row in self[self['seqid'] == seqid]:
-                for start, end in row['locs']:
-                    fa[start - 1: end] = mask_with
+                if cds:
+                    for start, end in row['locs']:
+                        assert start <= end, (row, start, end)
+                        fa[start - 1: end] = mask_with
+                else:
+                    fa[row['start'] - 1: row['end']] = mask_with
             assert s == fa.shape[0]
             if out is None:
-                yield seqid, fa
+                yield seqid, fa.tostring()
             else:
                 print >> out, ">%s\n%s" % (seqid, fa.tostring())
 
@@ -344,11 +349,14 @@ class Bed(Flat):
         ends = [s[1] for s in row['locs']]
         slens = ",".join([str(e - s) for s, e in zip(starts, ends)])
         sstarts = ",".join("%i" % (s - row['start'] + 1) for s in starts)
-        return "\t".join(map(str, [row['seqid'], row['start'] - 1, row['end'],
+        try:
+            return "\t".join(map(str, [row['seqid'], row['start'] - 1, row['end'],
                                    row['accn'], row['score'], row['strand'], row['rgb'], row['thickstart'],
                                    row['thickend'], len(row['locs']), slens, sstarts]))
 
-
+        except KeyError:
+            print >>sys.stderr, row
+            raise
 
 
 if __name__ == "__main__":
